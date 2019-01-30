@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Mapping with D3</title>
+	<script src="http://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+	<script src="http://d3js.org/topojson.v2.min.js"></script>
+
+</head>
+<body>
+	<!-- Page elements and content go here. -->
+	<div id="sliderContainer">
+    	<input id="timeslide" type="range" min="2010" max="2017" value="2010" step="1"/><br>
+    	<span id="range">2010</span>
+	</div>
+	<script>
+		var width = 960,
+			height = 600;
+
+		var projection = d3.geoIdentity()
+		    .translate([-1400, -400])
+		    .scale(2.5);
+
+		var path = d3.geoPath()
+			.projection(projection);
+
+		var svg = d3.select("body").append("svg")
+			.attr("width", width)
+			.attr("height", height);
+
+			var q = d3.queue()
+				.defer(d3.json, "https://d3js.org/us-10m.v1.json")
+				.defer(d3.csv, "data/MCM_NFLIS_Data.csv")
+				.await(ready);
+
+			function ready(error, us, nflis) {
+				if (error) throw error;
+
+				console.log(nflis[0]);
+
+				var arr = []
+				nflis.forEach(function(d) {
+					arr.push(+d.TotalDrugReportsCounty);
+					d.year = +d.YYYY;
+					d.fips = +d.FIPS_Combined;
+					d.drugsReport = +d.TotalDrugReportsCounty;
+				});
+
+				var counties = topojson.feature(us, us.objects.counties);
+
+				var drugsReportByCountyByYear = d3.nest()
+					.key(function(d) { return d.fips; })
+					.key(function(d) { return d.year; })
+					.object(nflis);
+
+				// console.log(drugsReportByCountyByYear);
+
+				counties.features.forEach(function(county) {
+					county.properties.years = drugsReportByCountyByYear[+county.id];
+				});
+
+				// console.log(arr);
+				// console.log(d3.max(arr));
+				var color = d3.scaleLinear()
+					.domain([0, d3.max(arr)])
+					// .domain([0, 4000])
+					.range(["#fee0d2", "#de2d26"]);
+
+				var countyShapes = svg.append("g")
+					.attr("class", "counties")
+					.selectAll("path")
+					.data(counties.features)
+					.enter()
+					.append("path")
+						.attr("d", path)
+						.style("stroke", "white")
+						.style("fill", "#aaaaaa");
+
+				svg.append("path")
+					.datum(topojson.mesh(us, us.objects.states, function(a, b) {
+						return a.id !== b.id;
+					}))
+					.attr("class", "states")
+					.attr("d", path)
+					.style("stroke", "black")
+					.style("fill", "none")
+					.style("stroke-linejoin", "round");
+
+				function update(year) {
+		   			document.getElementById("range").innerHTML=year;
+		   			countyShapes.style("fill", function(d) {
+		   				if (d.properties.years === undefined || d.properties.years[year] === undefined) {
+		   					return "#aaaaaa";
+		   				}
+		   				return color(d.properties.years[year][0].TotalDrugReportsCounty);
+		   			});
+   				}
+
+   				d3.select("#timeslide").on("input", function() {
+   					update(+this.value);
+				});
+			}
+
+				
+	</script>	
+</body>
+</html>
